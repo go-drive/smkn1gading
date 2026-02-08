@@ -1,0 +1,61 @@
+name: Hapus File Permanen (Bulk)
+
+on:
+  repository_dispatch:
+    types: [hapus_permanen_bulk]
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    
+    # Memberi izin tulis ke GITHUB_TOKEN agar bisa push
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Konfigurasi Git User
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install git-filter-repo
+        run: |
+          pip install git-filter-repo
+
+      - name: Hapus Banyak File Sekaligus
+        run: |
+          FILES="${{ github.event.client_payload.files_string }}"
+          echo "File target: $FILES"
+          
+          if [ -z "$FILES" ]; then
+            echo "Error: Tidak ada file yang dikirim dari PHP."
+            exit 1
+          fi
+          
+          CMD_ARGS=""
+          for f in $FILES; do
+             CMD_ARGS="$CMD_ARGS --path $f"
+          done
+          
+          # git-filter-repo akan menghapus remote 'origin' setelah ini jalan
+          git filter-repo $CMD_ARGS --invert-paths --force
+
+      - name: Push Perubahan (Force)
+        run: |
+          # 1. Tambahkan ulang remote origin karena dihapus oleh git-filter-repo
+          # Kita masukkan token langsung ke URL agar punya hak akses
+          git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          
+          # 2. Dapatkan nama branch saat ini (biasanya main atau master)
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          
+          echo "Pushing force ke branch $BRANCH_NAME..."
+          
+          # 3. Lakukan Force Push
+          git push origin HEAD:$BRANCH_NAME --force
